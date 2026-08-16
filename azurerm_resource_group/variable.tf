@@ -7,9 +7,9 @@ variable "rgnames" {
 
 variable "st_names" {
   type = map(object({
-    noor         = string
+    st_name1     = string
     rg_name      = string
-    jagah        = string
+    location     = string
     account_tier = string
     redundancy   = string
   }))
