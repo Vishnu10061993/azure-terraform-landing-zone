@@ -8,7 +8,6 @@ on:
       - "azurerm_resource_group/**"
       - ".github/workflows/terraform.yml"
 
-      
   push:
     branches:
       - main
@@ -31,45 +30,52 @@ env:
 # ============================================================
 
 jobs:
+
   security-scan:
     name: DevSecOps Security Scan
     runs-on: ubuntu-latest
 
     steps:
+
       # --------------------------------------------------------
       # Checkout
       # --------------------------------------------------------
+
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # ========================================================
+      # --------------------------------------------------------
       # GITLEAKS - SECRET SCANNING
-      # ========================================================
+      # --------------------------------------------------------
+
       - name: Gitleaks Secret Scan
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ========================================================
+      # --------------------------------------------------------
       # SETUP TERRAFORM
-      # ========================================================
+      # --------------------------------------------------------
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # ========================================================
+      # --------------------------------------------------------
       # TERRAFORM FORMAT
-      # ========================================================
+      # --------------------------------------------------------
+
       - name: Terraform Format Check
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
 
-      # ========================================================
-      # TFLINT - TERRAFORM LINTING
-      # ========================================================
+      # --------------------------------------------------------
+      # TFLINT
+      # --------------------------------------------------------
+
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v5
         with:
@@ -83,9 +89,10 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: tflint --recursive
 
-      # ========================================================
+      # --------------------------------------------------------
       # TRIVY - IaC SECURITY SCAN
-      # ========================================================
+      # --------------------------------------------------------
+
       - name: Run Trivy IaC Scan
         uses: aquasecurity/trivy-action@master
         with:
@@ -94,6 +101,7 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: 1
           format: table
+
 
   # ============================================================
   # TERRAFORM VALIDATE
@@ -105,6 +113,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -125,6 +134,7 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
+
   # ============================================================
   # TERRAFORM PLAN
   # ============================================================
@@ -135,6 +145,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -144,23 +155,20 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       # --------------------------------------------------------
-      # Azure Login via Service Principal
+      # Azure Login
       # --------------------------------------------------------
+
       - name: Azure Login
-        run: |
-          az login \
-            --service-principal \
-            --username "${{ secrets.AZURE_CLIENT_ID }}" \
-            --password "${{ secrets.AZURE_CLIENT_SECRET }}" \
-            --tenant "${{ secrets.AZURE_TENANT_ID }}"
-
-      - name: Set Azure Subscription
-        run: |
-          az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # --------------------------------------------------------
-      # Terraform Remote Backend & Plan
+      # Terraform Remote Backend
       # --------------------------------------------------------
+
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         env:
@@ -179,6 +187,7 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform plan
 
+
   # ============================================================
   # TERRAFORM APPLY
   # ============================================================
@@ -186,12 +195,11 @@ jobs:
   terraform-apply:
     name: Terraform Apply
     needs: terraform-plan
-
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -201,23 +209,20 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       # --------------------------------------------------------
-      # Azure Login via Service Principal
+      # Azure Login
       # --------------------------------------------------------
+
       - name: Azure Login
-        run: |
-          az login \
-            --service-principal \
-            --username "${{ secrets.AZURE_CLIENT_ID }}" \
-            --password "${{ secrets.AZURE_CLIENT_SECRET }}" \
-            --tenant "${{ secrets.AZURE_TENANT_ID }}"
-
-      - name: Set Azure Subscription
-        run: |
-          az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # --------------------------------------------------------
-      # Terraform Init & Apply
+      # Terraform Init
       # --------------------------------------------------------
+
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         env:
@@ -226,6 +231,10 @@ jobs:
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform init -reconfigure
+
+      # --------------------------------------------------------
+      # Terraform Apply
+      # --------------------------------------------------------
 
       - name: Terraform Apply
         working-directory: ${{ env.TF_WORKING_DIR }}
