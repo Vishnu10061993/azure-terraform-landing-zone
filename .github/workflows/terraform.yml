@@ -11,19 +11,37 @@ on:
   push:
     branches:
       - main
+      - "feature/**"
     paths:
       - "azurerm_resource_group/**"
       - ".github/workflows/terraform.yml"
 
   workflow_dispatch:
 
+# ============================================================
+# PERMISSIONS
+# ============================================================
+
 permissions:
   id-token: write
   contents: read
 
+# ============================================================
+# ENVIRONMENT VARIABLES
+# ============================================================
+
 env:
   TF_WORKING_DIR: azurerm_resource_group
   TF_VERSION: 1.9.8
+
+# ============================================================
+# CONCURRENCY
+# Cancel older workflow run when a new commit is pushed
+# ============================================================
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
 
 # ============================================================
 # SECURITY SCAN
@@ -38,7 +56,7 @@ jobs:
     steps:
 
       # --------------------------------------------------------
-      # Checkout
+      # CHECKOUT
       # --------------------------------------------------------
 
       - name: Checkout Repository
@@ -46,35 +64,35 @@ jobs:
         with:
           fetch-depth: 0
 
-      # --------------------------------------------------------
+      # ========================================================
       # GITLEAKS - SECRET SCANNING
-      # --------------------------------------------------------
+      # ========================================================
 
       - name: Gitleaks Secret Scan
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # --------------------------------------------------------
+      # ========================================================
       # SETUP TERRAFORM
-      # --------------------------------------------------------
+      # ========================================================
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # --------------------------------------------------------
+      # ========================================================
       # TERRAFORM FORMAT
-      # --------------------------------------------------------
+      # ========================================================
 
       - name: Terraform Format Check
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
 
-      # --------------------------------------------------------
-      # TFLINT
-      # --------------------------------------------------------
+      # ========================================================
+      # TFLINT - TERRAFORM LINTING
+      # ========================================================
 
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v5
@@ -89,9 +107,9 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: tflint --recursive
 
-      # --------------------------------------------------------
+      # ========================================================
       # TRIVY - IaC SECURITY SCAN
-      # --------------------------------------------------------
+      # ========================================================
 
       - name: Run Trivy IaC Scan
         uses: aquasecurity/trivy-action@master
@@ -103,9 +121,9 @@ jobs:
           format: table
 
 
-  # ============================================================
-  # TERRAFORM VALIDATE
-  # ============================================================
+# ============================================================
+# TERRAFORM FORMAT & VALIDATE
+# ============================================================
 
   terraform-check:
     name: Terraform Format and Validate
@@ -114,30 +132,50 @@ jobs:
 
     steps:
 
+      # --------------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------------
+
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # --------------------------------------------------------
+      # SETUP TERRAFORM
+      # --------------------------------------------------------
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      # --------------------------------------------------------
+      # FORMAT CHECK
+      # --------------------------------------------------------
+
       - name: Terraform Format Check
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
 
+      # --------------------------------------------------------
+      # INIT WITHOUT BACKEND
+      # --------------------------------------------------------
+
       - name: Terraform Init Without Backend
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init -backend=false
+
+      # --------------------------------------------------------
+      # VALIDATE
+      # --------------------------------------------------------
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
 
-  # ============================================================
-  # TERRAFORM PLAN
-  # ============================================================
+# ============================================================
+# TERRAFORM PLAN
+# ============================================================
 
   terraform-plan:
     name: Terraform Plan
@@ -146,17 +184,25 @@ jobs:
 
     steps:
 
+      # --------------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------------
+
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # --------------------------------------------------------
+      # SETUP TERRAFORM
+      # --------------------------------------------------------
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # --------------------------------------------------------
-      # Azure Login
-      # --------------------------------------------------------
+      # ========================================================
+      # AZURE LOGIN
+      # ========================================================
 
       - name: Azure Login
         uses: azure/login@v2
@@ -164,10 +210,19 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
 
       # --------------------------------------------------------
-      # Terraform Remote Backend
+      # SET AZURE SUBSCRIPTION
       # --------------------------------------------------------
+
+      - name: Set Azure Subscription
+        run: |
+          az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      # ========================================================
+      # TERRAFORM INIT
+      # ========================================================
 
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -177,6 +232,10 @@ jobs:
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform init -reconfigure
+
+      # ========================================================
+      # TERRAFORM PLAN
+      # ========================================================
 
       - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -188,29 +247,40 @@ jobs:
         run: terraform plan
 
 
-  # ============================================================
-  # TERRAFORM APPLY
-  # ============================================================
+# ============================================================
+# TERRAFORM APPLY
+# Apply ONLY on main branch push
+# ============================================================
 
   terraform-apply:
     name: Terraform Apply
     needs: terraform-plan
+
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
     runs-on: ubuntu-latest
 
     steps:
 
+      # --------------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------------
+
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # --------------------------------------------------------
+      # SETUP TERRAFORM
+      # --------------------------------------------------------
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # --------------------------------------------------------
-      # Azure Login
-      # --------------------------------------------------------
+      # ========================================================
+      # AZURE LOGIN
+      # ========================================================
 
       - name: Azure Login
         uses: azure/login@v2
@@ -218,10 +288,19 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
 
       # --------------------------------------------------------
-      # Terraform Init
+      # SET AZURE SUBSCRIPTION
       # --------------------------------------------------------
+
+      - name: Set Azure Subscription
+        run: |
+          az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      # ========================================================
+      # TERRAFORM INIT
+      # ========================================================
 
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -232,9 +311,9 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform init -reconfigure
 
-      # --------------------------------------------------------
-      # Terraform Apply
-      # --------------------------------------------------------
+      # ========================================================
+      # TERRAFORM APPLY
+      # ========================================================
 
       - name: Terraform Apply
         working-directory: ${{ env.TF_WORKING_DIR }}
