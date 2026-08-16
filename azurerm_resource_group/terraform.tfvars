@@ -12,7 +12,7 @@ st_names = {
   stg = {
     st_name1     = "sttttttt7777"
     rg_name      = "rg123"
-    location     = "westeurope"
+    location     = "centralindia"
     account_tier = "Standard"
     redundancy   = "GRS"
   }
