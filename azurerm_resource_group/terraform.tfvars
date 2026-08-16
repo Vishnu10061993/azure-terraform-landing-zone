@@ -7,6 +7,10 @@ rgnames = {
   name = "rg123er"
   location = "westeurope"
     }
+      rgtest34 =   {
+  name = "rg123eraju"
+  location = "westeurope"
+    }
    
 }
 st_names = {
