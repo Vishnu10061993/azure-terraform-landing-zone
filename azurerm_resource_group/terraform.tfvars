@@ -10,7 +10,7 @@ rgnames = {
 }
 st_names = {
   stg = {
-    noor         = "sttttttt7777"
+    st_name1     = "sttttttt7777"
     rg_name      = "rg123"
     location     = "westeurope"
     account_tier = "Standard"
